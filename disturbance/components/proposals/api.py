@@ -1781,15 +1781,15 @@ class ProposalViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
     )
     def proposed_approval(self, request, *args, **kwargs):
         instance = self.get_object()
-        if instance.application_type.name == ApplicationType.SITE_TRANSFER:
-            serializer = ProposedApprovalSerializer(data=request.data)
-            serializer.is_valid(raise_exception=True)
-        else:
-            serializer = ProposedApprovalSerializer(data=request.data)
-            serializer.is_valid(raise_exception=True)
+
+        serializer = ProposedApprovalSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
         instance.proposed_approval(request, serializer.validated_data)
+
         serializer_class = self.internal_serializer_class()
         serializer = serializer_class(instance, context={"request": request})
+
         return Response(serializer.data)
 
     # TODO on-cleanup - determine if this is required for apiary or not (applying internal permissions for now)
