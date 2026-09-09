@@ -1913,192 +1913,214 @@ class Proposal(DirtyFieldsMixin, RevisionedMixin):
             except:
                 raise
 
+    @transaction.atomic
     def proposed_approval(self, request, details):
-        with transaction.atomic():
-            try:
-                if not self.can_assess(request.user):
-                    raise exceptions.ProposalNotAuthorized()
-                if self.processing_status != "with_assessor_requirements":
-                    raise ValidationError("You cannot propose for approval if it is not with assessor for requirements")
-                # Do not accept new start and expiry dates for Apiary group applications with a licence, unless the licence has been reissued
-                start_date = details.get("start_date").strftime("%d/%m/%Y") if details.get("start_date") else None
-                expiry_date = details.get("expiry_date").strftime("%d/%m/%Y") if details.get("expiry_date") else None
+        if not self.can_assess(request.user):
+            raise exceptions.ProposalNotAuthorized()
 
-                if self.application_type.name == "Apiary":
-                    if self.approval and (self.approval.reissued or self.proposal_type == "renewal"):
-                        self.proposed_issuance_approval = {
-                            "start_date": start_date,
-                            "expiry_date": expiry_date,
-                            "details": details.get("details"),
-                            "cc_email": details.get("cc_email"),
-                        }
-                    elif self.proposed_issuance_approval:
-                        self.proposed_issuance_approval = {
-                            "start_date": self.proposed_issuance_approval.get("start_date")
-                            if self.proposed_issuance_approval.get("start_date")
-                            else details.get("start_date").strftime("%d/%m/%Y"),
-                            "expiry_date": self.proposed_issuance_approval.get("expiry_date")
-                            if self.proposed_issuance_approval.get("expiry_date")
-                            else details.get("expiry_date").strftime("%d/%m/%Y"),
-                            "details": details.get("details"),
-                            "cc_email": details.get("cc_email"),
-                        }
-                    else:
-                        self.proposed_issuance_approval = {
-                            "start_date": start_date,
-                            "expiry_date": expiry_date,
-                            "details": details.get("details"),
-                            "cc_email": details.get("cc_email"),
-                        }
-                # Apiary Site Transfers
-                else:
-                    self.proposed_issuance_approval = {
-                        "start_date": start_date,
-                        "expiry_date": expiry_date,
-                        "details": details.get("details"),
-                        "cc_email": details.get("cc_email"),
-                    }
+        if self.processing_status != "with_assessor_requirements":
+            raise ValidationError("You cannot propose for approval if it is not with assessor for requirements")
 
-                self.proposed_decline_status = False
-                approver_comment = ""
-                self.move_to_status(request, "with_approver", approver_comment)
-                self.assigned_officer = None
+        # Do not accept new start and expiry dates for Apiary group applications with a licence, unless the licence has been reissued
+        start_date = details.get("start_date").strftime("%d/%m/%Y") if details.get("start_date") else None
+        expiry_date = details.get("expiry_date").strftime("%d/%m/%Y") if details.get("expiry_date") else None
 
-                apiary_sites = request.data.get("apiary_sites", None)
-                apiary_sites_list = []
-                if apiary_sites:
-                    # When new apiary proposal
-                    if self.application_type.name == ApplicationType.APIARY:
-                        for apiary_site in apiary_sites:
-                            my_site = ApiarySite.objects.get(id=apiary_site["id"])
-                            self.proposal_apiary.set_workflow_selected_status(my_site, apiary_site.get("checked"))
-                            if apiary_site.get("checked"):
-                                apiary_sites_list.append(apiary_site.get("id"))
-                                relation = self.proposal_apiary.get_relation(my_site)
-                                from disturbance.components.proposals.serializers_apiary import (
-                                    ApiarySiteOnProposalProcessedLicensedSiteSaveSerializer,
-                                )
+        if self.application_type.name == "Apiary":
+            if self.approval and (self.approval.reissued or self.proposal_type == "renewal"):
+                self.proposed_issuance_approval = {
+                    "start_date": start_date,
+                    "expiry_date": expiry_date,
+                    "details": details.get("details"),
+                    "cc_email": details.get("cc_email"),
+                }
+            elif self.proposed_issuance_approval:
+                self.proposed_issuance_approval = {
+                    "start_date": self.proposed_issuance_approval.get("start_date")
+                    if self.proposed_issuance_approval.get("start_date")
+                    else details.get("start_date").strftime("%d/%m/%Y"),
+                    "expiry_date": self.proposed_issuance_approval.get("expiry_date")
+                    if self.proposed_issuance_approval.get("expiry_date")
+                    else details.get("expiry_date").strftime("%d/%m/%Y"),
+                    "details": details.get("details"),
+                    "cc_email": details.get("cc_email"),
+                }
+            else:
+                self.proposed_issuance_approval = {
+                    "start_date": start_date,
+                    "expiry_date": expiry_date,
+                    "details": details.get("details"),
+                    "cc_email": details.get("cc_email"),
+                }
+        # Apiary Site Transfers
+        else:
+            self.proposed_issuance_approval = {
+                "start_date": start_date,
+                "expiry_date": expiry_date,
+                "details": details.get("details"),
+                "cc_email": details.get("cc_email"),
+            }
 
-                                serializer = ApiarySiteOnProposalProcessedLicensedSiteSaveSerializer(
-                                    relation, data=apiary_site["properties"]
-                                )
-                                serializer.is_valid(raise_exception=True)
-                                serializer.save()
+        self.proposed_decline_status = False
+        approver_comment = ""
+        self.move_to_status(request, "with_approver", approver_comment)
+        self.assigned_officer = None
 
-                            if apiary_site.get("checked") and "coordinates_moved" in apiary_site:
-                                relation = self.proposal_apiary.get_relation(my_site)
-                                prev_coordinates = {
-                                    "lng": relation.wkb_geometry_processed.wkb_geometry.x,
-                                    "lat": relation.wkb_geometry_processed.wkb_geometry.y,
-                                }
+        apiary_sites = request.data.get("apiary_sites", None)
+        apiary_sites_list = []
+        if apiary_sites:
+            # -------------------------------------------------------------
+            # Branch 1: New Apiary Proposal
+            # -------------------------------------------------------------
+            if self.application_type.name == ApplicationType.APIARY:
+                from disturbance.components.proposals.serializers_apiary import (
+                    ApiarySiteOnProposalProcessedGeometrySaveSerializer,
+                    ApiarySiteOnProposalProcessedLicensedSiteSaveSerializer,
+                )
 
-                                # Update coordinate (Assessor and Approver can move the proposed site location)
-                                geom_str = GEOSGeometry(
-                                    "POINT("
-                                    + str(apiary_site["coordinates_moved"]["lng"])
-                                    + " "
-                                    + str(apiary_site["coordinates_moved"]["lat"])
-                                    + ")",
-                                    srid=4326,
-                                )
-                                from disturbance.components.proposals.serializers_apiary import (
-                                    ApiarySiteOnProposalProcessedGeometrySaveSerializer,
-                                )
+                # 1. Bulk-fetch all ApiarySites in a single query
+                site_ids = [s["id"] for s in apiary_sites if "id" in s]
+                sites_map = ApiarySite.objects.in_bulk(site_ids)
 
-                                serializer = ApiarySiteOnProposalProcessedGeometrySaveSerializer(
-                                    relation,
-                                    data={
-                                        "wkb_geometry_processed": geom_str,
-                                        "licensed_site": apiary_site["properties"].get("licensed_site"),
-                                    },
-                                )
-                                serializer.is_valid(raise_exception=True)
-                                serializer.save()
+                for apiary_site in apiary_sites:
+                    site_id = apiary_site.get("id")
+                    my_site = sites_map.get(site_id)
+                    if not my_site:
+                        continue
 
-                                self.log_user_action(
-                                    ProposalUserAction.APIARY_SITE_MOVED.format(
-                                        apiary_site["id"],
-                                        prev_coordinates,
-                                        (
-                                            apiary_site["coordinates_moved"]["lng"],
-                                            apiary_site["coordinates_moved"]["lat"],
-                                        ),
-                                    ),
-                                    request,
-                                )
+                    is_checked = apiary_site.get("checked", False)
+                    self.proposal_apiary.set_workflow_selected_status(my_site, is_checked)
 
-                    # Site transfer
-                    elif self.application_type.name == ApplicationType.SITE_TRANSFER:
-                        for apiary_site in apiary_sites:
-                            transfer_site = SiteTransferApiarySite.objects.get(
-                                proposal_apiary=self.proposal_apiary,
-                                apiary_site_on_approval__apiary_site__id=apiary_site.get("id"),
+                    if is_checked:
+                        apiary_sites_list.append(site_id)
+                        relation = self.proposal_apiary.get_relation(my_site)
+                        properties_data = apiary_site.get("properties", {}).copy()
+
+                        # Consolidate Geometry and Property updates into a single serializer/save
+                        if "coordinates_moved" in apiary_site:
+                            prev_coordinates = {
+                                "lng": relation.wkb_geometry_processed.wkb_geometry.x,
+                                "lat": relation.wkb_geometry_processed.wkb_geometry.y,
+                            }
+                            new_lng = apiary_site["coordinates_moved"]["lng"]
+                            new_lat = apiary_site["coordinates_moved"]["lat"]
+
+                            properties_data["wkb_geometry_processed"] = GEOSGeometry(
+                                f"POINT({new_lng} {new_lat})", srid=4326
                             )
-                            transfer_site.internal_selected = (
-                                apiary_site.get("checked") if transfer_site.customer_selected else False
+
+                            serializer = ApiarySiteOnProposalProcessedGeometrySaveSerializer(relation, data=properties_data)
+                            serializer.is_valid(raise_exception=True)
+                            serializer.save()
+
+                            self.log_user_action(
+                                ProposalUserAction.APIARY_SITE_MOVED.format(
+                                    site_id,
+                                    prev_coordinates,
+                                    (new_lng, new_lat),
+                                ),
+                                request,
                             )
-                            if apiary_site.get("checked"):
-                                apiary_sites_list.append(apiary_site.get("id"))
-                            transfer_site.save()
+                        else:
+                            serializer = ApiarySiteOnProposalProcessedLicensedSiteSaveSerializer(
+                                relation, data=properties_data
+                            )
+                            serializer.is_valid(raise_exception=True)
+                            serializer.save()
 
-                            asoa = transfer_site.apiary_site_on_approval
-                            asoa.licensed_site = apiary_site.get("properties")["licensed_site"]
-                            asoa.save()
-                self.save()
+            elif self.application_type.name == ApplicationType.SITE_TRANSFER:
+                site_payload_map = {s["id"]: s for s in apiary_sites if "id" in s}
 
-                # Log proposal action
-                if self.apiary_group_application_type:
-                    if self.application_type and self.application_type.name == ApplicationType.SITE_TRANSFER:
-                        target_approval_lodgement_number = (
-                            self.proposal_apiary.target_approval.lodgement_number
-                            if self.proposal_apiary.target_approval
-                            else ""
-                        )
-                        self.log_user_action(
-                            ProposalUserAction.ACTION_PROPOSED_APIARY_APPROVAL_SITE_TRANSFER.format(
-                                self.lodgement_number,
-                                self.proposal_apiary.originating_approval.lodgement_number,
-                                target_approval_lodgement_number,
-                                str(apiary_sites_list).lstrip("[").rstrip("]"),
-                            ),
-                            request,
-                        )
-                    else:
-                        self.log_user_action(
-                            ProposalUserAction.ACTION_PROPOSED_APIARY_APPROVAL.format(
-                                self.lodgement_number,
-                                self.proposed_issuance_approval.get("start_date"),
-                                self.proposed_issuance_approval.get("expiry_date"),
-                                str(apiary_sites_list).lstrip("[").rstrip("]"),
-                            ),
-                            request,
-                        )
-                else:
-                    self.log_user_action(
-                        ProposalUserAction.ACTION_PROPOSED_APPROVAL.format(self.lodgement_number),
-                        request,
-                    )
-                # Log entry for organisation
-                if self.applicant:
-                    if self.apiary_group_application_type:
-                        self.applicant.log_user_action(
-                            ProposalUserAction.ACTION_PROPOSED_APIARY_APPROVAL.format(
-                                self.lodgement_number,
-                                self.proposed_issuance_approval.get("start_date"),
-                                self.proposed_issuance_approval.get("expiry_date"),
-                                str(apiary_sites_list).lstrip("[").rstrip("]"),
-                            ),
-                            request,
-                        )
-                    else:
-                        self.applicant.log_user_action(
-                            ProposalUserAction.ACTION_PROPOSED_APPROVAL.format(self.lodgement_number),
-                            request,
-                        )
+                # 1. Fetch all transfer records + related 'apiary_site_on_approval' in 1 query
+                transfer_sites = SiteTransferApiarySite.objects.filter(
+                    proposal_apiary=self.proposal_apiary,
+                    apiary_site_on_approval__apiary_site__id__in=site_payload_map.keys(),
+                ).select_related("apiary_site_on_approval__apiary_site")
 
-                send_approver_approve_email_notification(request, self)
-            except:
-                raise
+                transfer_sites_to_update = []
+                asoa_to_update = []
+
+                for transfer_site in transfer_sites:
+                    site_id = transfer_site.apiary_site_on_approval.apiary_site_id
+                    site_data = site_payload_map.get(site_id)
+                    if not site_data:
+                        continue
+
+                    is_checked = site_data.get("checked", False)
+                    if is_checked:
+                        apiary_sites_list.append(site_id)
+
+                    # Update transfer_site in memory
+                    transfer_site.internal_selected = is_checked if transfer_site.customer_selected else False
+                    transfer_sites_to_update.append(transfer_site)
+
+                    # Update asoa in memory (no extra DB query thanks to select_related)
+                    asoa = transfer_site.apiary_site_on_approval
+                    asoa.licensed_site = site_data.get("properties", {}).get("licensed_site")
+                    asoa_to_update.append(asoa)
+
+                # 2. Bulk update all transfer sites in 1 query
+                if transfer_sites_to_update:
+                    SiteTransferApiarySite.objects.bulk_update(transfer_sites_to_update, ["internal_selected"])
+
+                # 3. Bulk update all apiary sites on approval in 1 query
+                if asoa_to_update:
+                    # Replace 'asoa_to_update[0].__class__' with your actual Model class name if preferred
+                    asoa_to_update[0].__class__.objects.bulk_update(asoa_to_update, ["licensed_site"])
+        self.save()
+
+        # Log proposal action
+        if self.apiary_group_application_type:
+            if self.application_type and self.application_type.name == ApplicationType.SITE_TRANSFER:
+                target_approval_lodgement_number = (
+                    self.proposal_apiary.target_approval.lodgement_number
+                    if self.proposal_apiary.target_approval
+                    else ""
+                )
+                self.log_user_action(
+                    ProposalUserAction.ACTION_PROPOSED_APIARY_APPROVAL_SITE_TRANSFER.format(
+                        self.lodgement_number,
+                        self.proposal_apiary.originating_approval.lodgement_number,
+                        target_approval_lodgement_number,
+                        str(apiary_sites_list).lstrip("[").rstrip("]"),
+                    ),
+                    request,
+                )
+            else:
+                self.log_user_action(
+                    ProposalUserAction.ACTION_PROPOSED_APIARY_APPROVAL.format(
+                        self.lodgement_number,
+                        self.proposed_issuance_approval.get("start_date"),
+                        self.proposed_issuance_approval.get("expiry_date"),
+                        str(apiary_sites_list).lstrip("[").rstrip("]"),
+                    ),
+                    request,
+                )
+        else:
+            self.log_user_action(
+                ProposalUserAction.ACTION_PROPOSED_APPROVAL.format(self.lodgement_number),
+                request,
+            )
+        # Log entry for organisation
+        if self.applicant:
+            if self.apiary_group_application_type:
+                self.applicant.log_user_action(
+                    ProposalUserAction.ACTION_PROPOSED_APIARY_APPROVAL.format(
+                        self.lodgement_number,
+                        self.proposed_issuance_approval.get("start_date"),
+                        self.proposed_issuance_approval.get("expiry_date"),
+                        str(apiary_sites_list).lstrip("[").rstrip("]"),
+                    ),
+                    request,
+                )
+            else:
+                self.applicant.log_user_action(
+                    ProposalUserAction.ACTION_PROPOSED_APPROVAL.format(self.lodgement_number),
+                    request,
+                )
+
+        # Only sends the email if the transaction succeeds and prevents keeping the transaction open during
+        # SMTP / Email Sending
+        transaction.on_commit(lambda: send_approver_approve_email_notification(request, self))
 
     def final_approval_temp_use(self, request):
         with transaction.atomic():
