@@ -1,9 +1,13 @@
 <template lang="html">
     <div>
         <div class="row col-sm-12">
-            <div v-if="loading_sites" class="spinner_on_map">
-                <i class='fa fa-4x fa-spinner fa-spin'></i>
-            </div>
+            <div v-if="loading_sites"
+                class="spinner-border text-primary spinner_on_map"
+                role="status"
+                style="width: 3rem; height: 3rem"
+            >
+                <span class="visually-hidden">Loading...</span>
+            </div>            
             <ComponentMap
                 ref="component_map"
                 :is_internal="is_internal"
