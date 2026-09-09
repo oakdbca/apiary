@@ -79,8 +79,8 @@ def send_amendment_email_notification(amendment_request, request, compliance):
     }
 
     all_ccs = []
-    if compliance.proposal.relevant_applicant.email:
-        cc_list = compliance.proposal.relevant_applicant.email
+    if compliance.proposal.relevant_applicant_email:
+        cc_list = compliance.proposal.relevant_applicant_email
         if cc_list:
             all_ccs = [cc_list]
 
@@ -273,8 +273,8 @@ def send_compliance_accept_email_notification(compliance,request):
         'compliance': compliance
     }    
     all_ccs = []
-    if compliance.proposal.relevant_applicant.email:
-        cc_list = compliance.proposal.relevant_applicant.email
+    if compliance.proposal.relevant_applicant_email:
+        cc_list = compliance.proposal.relevant_applicant_email
         if cc_list:
             all_ccs = [cc_list]
     msg = email.send(compliance.submitter.email, cc=all_ccs, context=context)
@@ -311,8 +311,8 @@ def send_external_submit_email_notification(request, compliance):
         'url': url
     }
     all_ccs = []
-    if compliance.proposal.relevant_applicant.email:
-        cc_list = compliance.proposal.relevant_applicant.email
+    if compliance.proposal.relevant_applicant_email:
+        cc_list = compliance.proposal.relevant_applicant_email
         if cc_list:
             all_ccs = [cc_list]
 
