@@ -1124,7 +1124,7 @@ class ProposalApiaryViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
             serializer = serializer_class(instance.proposal, context={"request": request})
             return Response(serializer.data)
         else:
-            raise serializer.ValidationError("Can only send reference when proposal is With Assessor.")
+            raise serializers.ValidationError("Can only send reference when proposal is With Assessor.")
 
     @action(detail=True, methods=["post"], permission_classes=[ProposalAssessorPermission])
     @renderer_classes((JSONRenderer,))
@@ -1916,7 +1916,7 @@ class ProposalViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
             serializer = serializer_class(instance, context={"request": request})
             return Response(serializer.data)
         else:
-            raise serializer.ValidationError("Can only send reference when proposal is With Assessor.")
+            raise serializers.ValidationError("Can only send reference when proposal is With Assessor.")
 
     @action(detail=True, methods=["post"])
     @basic_exception_handler
