@@ -2,12 +2,6 @@
 
 openssl rand -hex 32 > /app/git_hash
 
-# Start unoserver if either web or cron might generate PDF documents
-if [ "$ENABLE_WEB" == "True" ] || [ "$ENABLE_CRON" == "True" ]; then
-    echo "Starting Unoserver daemon"
-    unoserver &
-fi
-
 if [ "$ENABLE_CRON" == "True" ]; then
     echo "Starting Python Cron"
     python /bin/scheduler.py /app/python-cron /app/logs/python-cron.log &

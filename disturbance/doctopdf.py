@@ -1,12 +1,12 @@
-import io
 import logging
 import os
+import subprocess
+import tempfile
 
 from django.conf import settings
 from docx.shared import Mm
 from docxtpl import DocxTemplate, InlineImage, R
 from rest_framework.exceptions import ValidationError
-from unoserver.client import UnoClient
 
 from disturbance.components.main.models import ApiaryGlobalSettings
 
@@ -60,35 +60,64 @@ def create_apiary_licence_pdf_contents(approval, proposal, copied_to_permit, sit
 
     doc.render(context)
 
-    doc_io = io.BytesIO()
-    doc.save(doc_io)
-    doc_bytes = doc_io.getvalue()
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_docx_path = os.path.join(temp_dir, "licence.docx")
+        doc.save(temp_docx_path)
 
-    try:
-        host = settings.UNOSERVER_HOST
-        port = settings.UNOSERVER_PORT
-        client = UnoClient(server=host, port=port)
-        pdf_bytes = client.convert(indata=doc_bytes, convert_to="pdf")
-    except (ConnectionRefusedError, OSError) as e:
-        logger.error(
-            "Unoserver connection failed on %s:%s for Approval ID %s: %s",
-            host,
-            port,
-            approval.id,
-            e,
-            exc_info=True,
-        )
-        raise ValidationError(
-            "The document conversion service (Unoserver) is currently unreachable. "
-            "Please try again or contact OIM Service Desk if the problem persists."
-        )
-    except Exception as e:
-        logger.error(
-            "Unexpected error during PDF generation for Approval ID %s: %s",
-            approval.id,
-            e,
-            exc_info=True,
-        )
-        raise ValidationError(f"An unexpected error occurred while generating the licence PDF: {str(e)}")
+        try:
+            cmd = [
+                "libreoffice",
+                "--headless",
+                "--convert-to",
+                "pdf",
+                temp_docx_path,
+                "--outdir",
+                temp_dir,
+            ]
+
+            result = subprocess.run(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=True,
+                timeout=60,
+            )
+
+            temp_pdf_path = os.path.join(temp_dir, "licence.pdf")
+            if not os.path.exists(temp_pdf_path):
+                raise FileNotFoundError(f"Generated PDF not found at {temp_pdf_path}")
+
+            with open(temp_pdf_path, "rb") as f:
+                pdf_bytes = f.read()
+
+        except subprocess.TimeoutExpired as e:
+            logger.error(
+                "LibreOffice conversion timed out for Approval ID %s: %s",
+                approval.id,
+                e,
+                exc_info=True,
+            )
+            raise ValidationError("The PDF conversion service timed out. Please try again or contact OIM Service Desk.")
+        except (subprocess.CalledProcessError, FileNotFoundError, OSError) as e:
+            stderr_msg = e.stderr.decode("utf-8", errors="ignore") if hasattr(e, "stderr") and e.stderr else ""
+            logger.error(
+                "LibreOffice conversion failed for Approval ID %s: %s | stderr: %s",
+                approval.id,
+                e,
+                stderr_msg,
+                exc_info=True,
+            )
+            raise ValidationError(
+                "An error occurred while generating the licence PDF via LibreOffice. "
+                "Please try again or contact OIM Service Desk."
+            )
+        except Exception as e:
+            logger.error(
+                "Unexpected error during PDF generation for Approval ID %s: %s",
+                approval.id,
+                e,
+                exc_info=True,
+            )
+            raise ValidationError(f"An unexpected error occurred while generating the licence PDF: {str(e)}")
 
     return pdf_bytes

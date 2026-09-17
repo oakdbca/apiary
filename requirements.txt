@@ -54,4 +54,3 @@ xlsxwriter~=3.2.2
 orjson~=3.11
 django-debug-toolbar~=7.0
 sentry-sdk~=2.67.1
-unoserver~=3.7
