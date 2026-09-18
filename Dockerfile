@@ -37,6 +37,10 @@ RUN python3 -m venv $VIRTUAL_ENV && \
     $VIRTUAL_ENV/bin/pip install --upgrade pip && \
     $VIRTUAL_ENV/bin/pip install --no-cache-dir -r requirements.txt
 
+# Inject the LibreOffice path into Python's site-packages (required for unoserver to work)
+RUN SITE_PKG=$($VIRTUAL_ENV/bin/python -c "import site; print(site.getsitepackages()[0])") && \
+    echo "/opt/libreoffice/program" > "$SITE_PKG/libreoffice.pth"
+
 # Copy project files
 COPY --chown=oim:oim gunicorn.ini.py manage.py python-cron ./
 COPY --chown=oim:oim .git ./.git
