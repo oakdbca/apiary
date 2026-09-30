@@ -204,6 +204,7 @@ def get_proxy_cache():
     return proxy_cache_array
 
 
+@per_request_cache
 def is_internal_user(user):
     return (
         user
