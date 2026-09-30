@@ -15,7 +15,7 @@ from disturbance.components.emails.emails import TemplateEmailBase
 from disturbance.components.main.email import _extract_email_headers
 from disturbance.components.main.models import District, Region
 from disturbance.components.main.utils import get_region_district
-from disturbance.settings import SITE_DOMAIN, SITE_URL
+from disturbance.helpers import convert_internal_url_to_external_url
 
 logger = logging.getLogger(__name__)
 
@@ -180,8 +180,7 @@ def send_contact_licence_holder_email(apiary_site_on_approval, comments, sender)
     return email_data
 
 
-def send_on_site_notification_email(request_data, sender, update=False):
-
+def send_on_site_notification_email(request, request_data, sender, update=False):
     def get_recipients():
         rd = get_region_district(asoa.wkb_geometry)
 
@@ -245,6 +244,10 @@ def send_on_site_notification_email(request_data, sender, update=False):
             else approval.relevant_applicant.mobile_number
         )
 
+    url = request.build_absolute_uri(f"{reverse('external')}approval/{approval.id}")
+
+    url = convert_internal_url_to_external_url(url)
+
     context = {
         "apiary_site": asoa.apiary_site,
         "approval": approval,
@@ -258,7 +261,7 @@ def send_on_site_notification_email(request_data, sender, update=False):
         "people_names": people_names,
         "flora": flora,
         "sender": sender,
-        "licence_url": SITE_URL + f"{reverse('external')}approval/{approval.id}",
+        "licence_url": url,
     }
 
     cc = [approval.relevant_applicant.email] if hasattr(approval.relevant_applicant, "email") else []
@@ -271,13 +274,12 @@ def send_on_site_notification_email(request_data, sender, update=False):
 
 
 def send_annual_rental_fee_awaiting_payment_confirmation(approval, annual_rental_fee, invoice):
+    """Recipient: Always external users"""
     email = ApprovalAnnualRentalFeeAwaitingPaymentConfirmationEmail()
-    path_to_pay = reverse("annual_rental_fee", kwargs={"annual_rental_fee_id": annual_rental_fee.id})
 
-    if "localhost" in SITE_DOMAIN:
-        url = "http://localhost:8071" + path_to_pay
-    else:
-        url = SITE_URL + path_to_pay
+    url = reverse("annual_rental_fee", kwargs={"annual_rental_fee_id": annual_rental_fee.id})
+
+    url = convert_internal_url_to_external_url(url)
 
     context = {
         "approval": approval,
