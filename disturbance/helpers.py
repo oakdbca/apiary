@@ -240,3 +240,13 @@ def convert_external_url_to_internal_url(url):
             url.split("." + settings.SITE_DOMAIN)
         )
     return url
+
+
+def convert_internal_url_to_external_url(url):
+    if not settings.SITE_SUBDOMAIN_INTERNAL_SUFFIX:
+        return url
+
+    if settings.SITE_SUBDOMAIN_INTERNAL_SUFFIX in url:
+        # remove '-internal'. This email is for external submitters
+        url = "".join(url.split(settings.SITE_SUBDOMAIN_INTERNAL_SUFFIX))
+    return url
