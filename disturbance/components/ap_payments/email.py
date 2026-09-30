@@ -17,7 +17,7 @@ def get_sender_user():
     sender = settings.DEFAULT_FROM_EMAIL
     try:
         sender_user = EmailUser.objects.get(email__icontains=sender)
-    except:
+    except EmailUser.DoesNotExist:
         EmailUser.objects.create(email=sender, password="")
         sender_user = EmailUser.objects.get(email__icontains=sender)
     return sender_user
@@ -30,7 +30,6 @@ class ApplicationFeeInvoiceApiarySendNotificationEmail(TemplateEmailBase):
 
 
 def send_application_fee_invoice_apiary_email_notification(request, proposal, invoice, recipients, is_test=False):
-    print("send_application_fee_invoice_apiary_email_notification")
     email = ApplicationFeeInvoiceApiarySendNotificationEmail()
 
     context = {
@@ -69,7 +68,6 @@ def _log_proposal_email(email_message, proposal, sender=None):
         fromm = smart_bytes(sender) if sender else smart_bytes(email_message.from_email)
         # the to email is normally a list
         if isinstance(email_message.to, list):
-            print(email_message.to)
             to = ",".join(email_message.to)
         else:
             to = smart_bytes(email_message.to)
