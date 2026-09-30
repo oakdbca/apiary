@@ -2,12 +2,12 @@ import logging
 import mimetypes
 
 import six
+from confy import env
 from django.conf import settings
 from django.core.mail import EmailMultiAlternatives
+from django.template import Template, loader
 from django.urls import reverse
-from django.template import loader, Template
 from django.utils.html import strip_tags
-from confy import env
 
 from disturbance.components.main.models import Document
 
@@ -16,21 +16,21 @@ logger = logging.getLogger(__name__)
 
 def _render(template, context):
     if isinstance(context, dict):
-        context.update({'settings': settings})
+        context.update({"settings": settings})
     if isinstance(template, six.string_types):
         template = Template(template)
     return template.render(context)
 
 
 def host_reverse(name, args=None, kwargs=None):
-    return "{}{}".format(settings.DEFAULT_HOST, reverse(name, args=args, kwargs=kwargs))
+    return f"{settings.DEFAULT_HOST}{reverse(name, args=args, kwargs=kwargs)}"
 
 
-class TemplateEmailBase(object):
-    subject = ''
-    html_template = 'disturbance/emails/base_email.html'
+class TemplateEmailBase:
+    subject = ""
+    html_template = "disturbance/emails/base_email.html"
     # txt_template can be None, in this case a 'tag-stripped' version of the html will be sent. (see send)
-    txt_template = 'disturbance/emails/base-email.txt'
+    txt_template = "disturbance/emails/base-email.txt"
 
     def send_to_user(self, user, context=None):
         return self.send(user.email, context=context)
@@ -48,8 +48,8 @@ class TemplateEmailBase(object):
         :param cc:
         :return:
         """
-        email_instance = env('EMAIL_INSTANCE','DEV')
-        systemid = env('SYSTEM_ID','')
+        email_instance = env("EMAIL_INSTANCE", "DEV")
+        systemid = env("SYSTEM_ID", "")
         # The next line will throw a TemplateDoesNotExist if html template cannot be found
         html_template = loader.get_template(self.html_template)
         # render html
@@ -81,24 +81,32 @@ class TemplateEmailBase(object):
                 _attachments.append((filename, content, mime))
             else:
                 _attachments.append(attachment)
-        msg = EmailMultiAlternatives(self.subject, txt_body, from_email=from_address, to=to_addresses,
-                attachments=_attachments, cc=cc, bcc=bcc, headers={'System-Environment': email_instance, 'ITSystem-ID': systemid +"-"+email_instance})
-        msg.attach_alternative(html_body, 'text/html')
+        msg = EmailMultiAlternatives(
+            self.subject,
+            txt_body,
+            from_email=from_address,
+            to=to_addresses,
+            attachments=_attachments,
+            cc=cc,
+            bcc=bcc,
+            headers={"System-Environment": email_instance, "ITSystem-ID": systemid + "-" + email_instance},
+        )
+        msg.attach_alternative(html_body, "text/html")
         try:
             if not settings.DISABLE_EMAIL:
                 msg.send(fail_silently=False)
-            logger.info("Email sent to: {} - subject: {}".format(to_addresses, self.subject))
+            logger.info(f"Email sent to: {to_addresses} - subject: {self.subject}")
             return msg
         except Exception as e:
-            logger.exception("Error while sending email to {}: {}".format(to_addresses, e))
+            logger.exception(f"Error while sending email to {to_addresses}: {e}")
             return None
 
+
 class ExportReportEmail(TemplateEmailBase):
-    
-    def __init__(self,model_name=""):
+    def __init__(self, model_name=""):
         self.model_name = model_name
-    
+
     model_name = ""
-    subject='Attached: Apiary - {} Report'.format(model_name.capitalize())
-    html_template='disturbance/emails/report_attached.html'
-    txt_template='disturbance/emails/report_attached.txt'
+    subject = f"Attached: Apiary - {model_name.capitalize()} Report"
+    html_template = "disturbance/emails/report_attached.html"
+    txt_template = "disturbance/emails/report_attached.txt"
