@@ -503,7 +503,7 @@ class OnSiteInformationViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixi
 
         sender = request.user
         try:
-            send_on_site_notification_email(request_data, sender, update=True)
+            send_on_site_notification_email(request, request_data, sender, update=True)
         except Exception as e:
             logger.error(f"Failed to send an email: {e}")
 
@@ -522,7 +522,7 @@ class OnSiteInformationViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixi
 
         sender = request.user
         try:
-            send_on_site_notification_email(request_data, sender)
+            send_on_site_notification_email(request, request_data, sender)
         except Exception as e:
             logger.error(f"Failed to send an email: {e}")
 
