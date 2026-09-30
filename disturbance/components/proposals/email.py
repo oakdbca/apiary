@@ -7,6 +7,7 @@ from django.utils.encoding import smart_bytes
 from ledger_api_client.ledger_models import EmailUserRO as EmailUser
 
 from disturbance.components.emails.emails import TemplateEmailBase
+from disturbance.helpers import convert_external_url_to_internal_url, convert_internal_url_to_external_url
 
 logger = logging.getLogger(__name__)
 
@@ -175,10 +176,14 @@ class ApiaryApproverSendBackNotificationEmail(TemplateEmailBase):
 
 
 def send_referral_email_notification(referral, request, reminder=False):
+    """Recipient: Always internal users"""
     email = ReferralSendNotificationEmail()
+
     url = request.build_absolute_uri(
         reverse("internal-referral-detail", kwargs={"proposal_pk": referral.proposal.id, "referral_pk": referral.id})
     )
+
+    url = convert_external_url_to_internal_url(url)
 
     context = {"proposal": referral.proposal, "url": url, "reminder": reminder, "comments": referral.text}
 
@@ -190,10 +195,13 @@ def send_referral_email_notification(referral, request, reminder=False):
 
 
 def send_referral_recall_email_notification(referral, request):
+    """Recipient: Always internal users"""
     email = ReferralRecallNotificationEmail()
     url = request.build_absolute_uri(
         reverse("internal-referral-detail", kwargs={"proposal_pk": referral.proposal.id, "referral_pk": referral.id})
     )
+
+    url = convert_external_url_to_internal_url(url)
 
     context = {
         "proposal": referral.proposal,
@@ -208,8 +216,12 @@ def send_referral_recall_email_notification(referral, request):
 
 
 def send_referral_complete_email_notification(referral, request):
+    """Recipient: Always internal users"""
     email = ReferralCompleteNotificationEmail()
+
     url = request.build_absolute_uri(reverse("internal-proposal-detail", kwargs={"proposal_pk": referral.proposal.id}))
+
+    url = convert_external_url_to_internal_url(url)
 
     context = {"proposal": referral.proposal, "url": url, "referral_comments": referral.referral_text}
 
@@ -221,10 +233,14 @@ def send_referral_complete_email_notification(referral, request):
 
 
 def send_apiary_referral_email_notification(referral, recipients, request, reminder=False):
+    """Recipient: Always internal users"""
     email = ApiaryReferralSendNotificationEmail()
+
     url = request.build_absolute_uri(
         reverse("internal-referral-detail", kwargs={"proposal_pk": referral.proposal.id, "referral_pk": referral.id})
     )
+
+    url = convert_external_url_to_internal_url(url)
 
     context = {"proposal": referral.proposal, "url": url, "reminder": reminder, "comments": referral.text}
 
@@ -236,9 +252,13 @@ def send_apiary_referral_email_notification(referral, recipients, request, remin
 
 
 def send_apiary_referral_complete_email_notification(referral, request, completed_by):
+    """Recipient: Always internal users"""
     email = ApiaryReferralCompleteNotificationEmail()
     email.subject = referral.sent_by.email + ": " + email.subject
+
     url = request.build_absolute_uri(reverse("internal-proposal-detail", kwargs={"proposal_pk": referral.proposal.id}))
+
+    url = convert_external_url_to_internal_url(url)
 
     context = {
         "completed_by": completed_by,
@@ -256,17 +276,17 @@ def send_apiary_referral_complete_email_notification(referral, request, complete
 
 
 def send_amendment_email_notification(amendment_request, request, proposal):
+    """Recipient: Always external users"""
     if proposal.apiary_group_application_type:
         email = ApiaryAmendmentRequestSendNotificationEmail()
     else:
         email = AmendmentRequestSendNotificationEmail()
 
     reason = amendment_request.reason.reason
+
     url = request.build_absolute_uri(reverse("external-proposal-detail", kwargs={"proposal_pk": proposal.id}))
 
-    if "-internal" in url:
-        # remove '-internal'. This email is for external submitters
-        url = "".join(url.split("-internal"))
+    url = convert_internal_url_to_external_url(url)
 
     attachments = []
     if amendment_request.amendment_request_documents:
@@ -278,10 +298,14 @@ def send_amendment_email_notification(amendment_request, request, proposal):
     context = {"proposal": proposal, "reason": reason, "amendment_request_text": amendment_request.text, "url": url}
 
     all_ccs = []
-    if proposal.applicant and proposal.relevant_applicant.email != proposal.submitter.email and proposal.relevant_applicant.email:
-            cc_list = proposal.relevant_applicant.email
-            if cc_list:
-                all_ccs = [cc_list]
+    if (
+        proposal.applicant
+        and proposal.relevant_applicant.email != proposal.submitter.email
+        and proposal.relevant_applicant.email
+    ):
+        cc_list = proposal.relevant_applicant.email
+        if cc_list:
+            all_ccs = [cc_list]
 
     msg = email.send(proposal.submitter.email, cc=all_ccs, context=context, attachments=attachments)
     sender = get_sender_user()
@@ -291,13 +315,15 @@ def send_amendment_email_notification(amendment_request, request, proposal):
 
 
 def send_submit_email_notification(request, proposal):
+    """Recipient: Always internal users"""
     if proposal.apiary_group_application_type:
         email = ApiarySubmitSendNotificationEmail()
     else:
         email = SubmitSendNotificationEmail()
+
     url = request.build_absolute_uri(reverse("internal-proposal-detail", kwargs={"proposal_pk": proposal.id}))
-    if "-internal" not in url:
-        url = f"-internal.{settings.SITE_DOMAIN}".join(url.split("." + settings.SITE_DOMAIN))
+
+    url = convert_external_url_to_internal_url(url)
 
     context = {"proposal": proposal, "url": url}
 
@@ -310,20 +336,23 @@ def send_submit_email_notification(request, proposal):
 
 
 def send_external_submit_email_notification(request, proposal):
+    """Recipient: Always external users"""
     if proposal.apiary_group_application_type:
         email = ApiaryExternalSubmitSendNotificationEmail()
     else:
         email = ExternalSubmitSendNotificationEmail()
     url = request.build_absolute_uri(reverse("external-proposal-detail", kwargs={"proposal_pk": proposal.id}))
 
-    if "-internal" in url:
-        # remove '-internal'. This email is for external submitters
-        url = "".join(url.split("-internal"))
+    url = convert_internal_url_to_external_url(url)
 
     context = {"proposal": proposal, "submitter": proposal.submitter.get_full_name(), "url": url}
 
     all_ccs = []
-    if proposal.applicant and proposal.relevant_applicant.email != proposal.submitter.email and proposal.relevant_applicant.email:
+    if (
+        proposal.applicant
+        and proposal.relevant_applicant.email != proposal.submitter.email
+        and proposal.relevant_applicant.email
+    ):
         cc_list = proposal.relevant_applicant.email
         if cc_list:
             all_ccs = [cc_list]
@@ -339,11 +368,15 @@ def send_external_submit_email_notification(request, proposal):
 
 # send email when Proposal is 'proposed to decline' by assessor.
 def send_approver_decline_email_notification(reason, request, proposal):
+    """Recipient: Always internal users"""
     if proposal.apiary_group_application_type:
         email = ApiaryApproverDeclineSendNotificationEmail()
     else:
         email = ApproverDeclineSendNotificationEmail()
     url = request.build_absolute_uri(reverse("internal-proposal-detail", kwargs={"proposal_pk": proposal.id}))
+
+    url = convert_external_url_to_internal_url(url)
+
     context = {"proposal": proposal, "reason": reason, "url": url}
 
     msg = email.send(proposal.approver_recipients, context=context)
@@ -354,11 +387,16 @@ def send_approver_decline_email_notification(reason, request, proposal):
 
 
 def send_approver_approve_email_notification(request, proposal):
+    """Recipient: Always internal users"""
     if proposal.apiary_group_application_type:
         email = ApiaryApproverApproveSendNotificationEmail()
     else:
         email = ApproverApproveSendNotificationEmail()
+
     url = request.build_absolute_uri(reverse("internal-proposal-detail", kwargs={"proposal_pk": proposal.id}))
+
+    url = convert_external_url_to_internal_url(url)
+
     context = {
         "start_date": proposal.proposed_issuance_approval.get("start_date"),
         "expiry_date": proposal.proposed_issuance_approval.get("expiry_date"),
@@ -375,6 +413,7 @@ def send_approver_approve_email_notification(request, proposal):
 
 
 def send_proposal_decline_email_notification(proposal, request, proposal_decline):
+    """Recipient: Always external users"""
     if proposal.apiary_group_application_type:
         email = ApiaryProposalDeclineSendNotificationEmail()
     else:
@@ -388,8 +427,12 @@ def send_proposal_decline_email_notification(proposal, request, proposal_decline
     if cc_list:
         all_ccs = cc_list.split(",")
 
-    if proposal.applicant and proposal.relevant_applicant.email != proposal.submitter.email and proposal.relevant_applicant.email:
-            all_ccs.append(proposal.relevant_applicant.email)
+    if (
+        proposal.applicant
+        and proposal.relevant_applicant.email != proposal.submitter.email
+        and proposal.relevant_applicant.email
+    ):
+        all_ccs.append(proposal.relevant_applicant.email)
 
     msg = email.send(proposal.submitter.email, bcc=all_ccs, context=context)
     sender = get_sender_user()
@@ -399,11 +442,16 @@ def send_proposal_decline_email_notification(proposal, request, proposal_decline
 
 
 def send_proposal_approver_sendback_email_notification(request, proposal):
+    """Recipient: Always internal users"""
     if proposal.apiary_group_application_type:
         email = ApiaryApproverSendBackNotificationEmail()
     else:
         email = ApproverSendBackNotificationEmail()
+
     url = request.build_absolute_uri(reverse("internal-proposal-detail", kwargs={"proposal_pk": proposal.id}))
+
+    url = convert_external_url_to_internal_url(url)
+
     context = {"proposal": proposal, "url": url, "approver_comment": proposal.approver_comment}
 
     msg = email.send(proposal.assessor_recipients, context=context)
@@ -414,6 +462,7 @@ def send_proposal_approver_sendback_email_notification(request, proposal):
 
 
 def send_proposal_approval_email_notification(proposal, request):
+    """Recipient: Always external users"""
     if proposal.apiary_group_application_type:
         email = ApiaryProposalApprovalSendNotificationEmail()
     else:
@@ -427,8 +476,12 @@ def send_proposal_approval_email_notification(proposal, request):
     cc_list = proposal.proposed_issuance_approval["cc_email"]
     all_ccs = []
     if cc_list:
-        all_ccs = cc_list.split(',')
-    if proposal.applicant and proposal.relevant_applicant.email != proposal.submitter.email and proposal.relevant_applicant.email:
+        all_ccs = cc_list.split(",")
+    if (
+        proposal.applicant
+        and proposal.relevant_applicant.email != proposal.submitter.email
+        and proposal.relevant_applicant.email
+    ):
         all_ccs.append(proposal.relevant_applicant.email)
 
     licence_document = proposal.approval.licence_document._file
@@ -447,6 +500,7 @@ def send_proposal_approval_email_notification(proposal, request):
 
 
 def send_site_transfer_approval_email_notification(proposal, request, approval):
+    """Recipient: Always external users"""
     email = ApiaryProposalApprovalSiteTransferSendNotificationEmail()
     if approval.reissued:
         email.subject = "Your Licence has been reissued."
@@ -484,15 +538,16 @@ def send_site_transfer_approval_email_notification(proposal, request, approval):
 
 
 def send_assessment_reminder_email_notification(proposal):
+    """Recipient: Always internal users"""
     if proposal.apiary_group_application_type:
         email = ApiaryAssessmentReminderSendNotificationEmail()
     else:
         email = AssessmentReminderSendNotificationEmail()
+
     url = settings.SITE_URL if settings.SITE_URL else ""
     url += reverse("internal-proposal-detail", kwargs={"proposal_pk": proposal.id})
-    if "-internal" not in url:
-        # add it. This email is for internal staff (assessors)
-        url = f"-internal.{settings.SITE_DOMAIN}".join(url.split("." + settings.SITE_DOMAIN))
+
+    url = convert_external_url_to_internal_url(url)
 
     context = {"proposal": proposal, "url": url}
 
@@ -532,8 +587,8 @@ def _log_proposal_referral_email(email_message, referral, sender=None):
 
     else:
         text = smart_bytes(email_message)
-        subject = ''
-        to = referral.proposal.relevant_applicant.email if referral.proposal.relevant_applicant.email else ''
+        subject = ""
+        to = referral.proposal.relevant_applicant.email if referral.proposal.relevant_applicant.email else ""
         fromm = smart_bytes(sender) if sender else SYSTEM_NAME
         all_ccs = ""
 
