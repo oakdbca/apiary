@@ -150,6 +150,15 @@ APIARY_URL = env("APIARY_URL", [])
 CRON_NOTIFICATION_EMAIL = env("CRON_NOTIFICATION_EMAIL", NOTIFICATION_EMAIL).lower()
 VERSION_NO = "1.0.1"
 
+# These are used for converting between internal and external urls
+# This is useful when generating urls for emails when the current request user
+# is external and the link needs to be internal or vis versa
+# To get email links to work locally, set SITE_SUBDOMAIN_INTERNAL_SUFFIX=None in .env
+SITE_RANCHER_CLUSTER = env("SITE_RANCHER_CLUSTER", None)
+SITE_SUBDOMAIN_INTERNAL_SUFFIX = env("SITE_SUBDOMAIN_INTERNAL_SUFFIX", "-internal")
+if SITE_RANCHER_CLUSTER:
+    SITE_SUBDOMAIN_INTERNAL_SUFFIX += "-" + SITE_RANCHER_CLUSTER
+
 BASE_URL = env("BASE_URL")
 
 CRON_CLASSES = [
