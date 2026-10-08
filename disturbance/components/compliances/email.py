@@ -7,6 +7,7 @@ from django.utils.encoding import smart_bytes
 from ledger_api_client.ledger_models import EmailUserRO as EmailUser
 
 from disturbance.components.emails.emails import TemplateEmailBase
+from disturbance.helpers import convert_external_url_to_internal_url, convert_internal_url_to_external_url
 
 logger = logging.getLogger(__name__)
 
@@ -78,10 +79,14 @@ class ComplianceInternalDueNotificationEmail(TemplateEmailBase):
 
 
 def send_amendment_email_notification(amendment_request, request, compliance):
+    """Recipient: Always external users"""
     email = ComplianceAmendmentRequestSendNotificationEmail()
     reason = amendment_request.reason.reason
+
     url = request.build_absolute_uri(reverse("external-compliance-detail", kwargs={"compliance_pk": compliance.id}))
-    url = "".join(url.split("-internal"))
+
+    url = convert_internal_url_to_external_url(url)
+
     context = {"compliance": compliance, "reason": reason, "amendment_request_text": amendment_request.text, "url": url}
 
     all_ccs = []
@@ -98,10 +103,14 @@ def send_amendment_email_notification(amendment_request, request, compliance):
 
 
 def send_apiary_amendment_email_notification(amendment_request, request, compliance):
+    """Recipient: Always external users"""
     email = ComplianceAmendmentRequestSendNotificationEmail()
     reason = amendment_request.reason.reason
+
     url = request.build_absolute_uri(reverse("external-compliance-detail", kwargs={"compliance_pk": compliance.id}))
-    url = "".join(url.split("-internal"))
+
+    url = convert_internal_url_to_external_url(url)
+
     context = {"compliance": compliance, "reason": reason, "amendment_request_text": amendment_request.text, "url": url}
 
     all_ccs = []
@@ -120,8 +129,13 @@ def send_apiary_amendment_email_notification(amendment_request, request, complia
 def send_apiary_reminder_email_notification(compliance):
     """Used by the management command, therefore have no request object - therefore explicitly defining base_url"""
     email = ComplianceReminderNotificationEmail()
+
     url = settings.SITE_URL if settings.SITE_URL else ""
+
     url += reverse("external-compliance-detail", kwargs={"compliance_pk": compliance.id})
+
+    url = convert_internal_url_to_external_url(url)
+
     context = {
         "compliance": compliance,
         "url": url,
@@ -152,12 +166,14 @@ def send_apiary_reminder_email_notification(compliance):
 
 
 def send_internal_reminder_email_notification(compliance):
+    """Recipient: Always internal users"""
     email = ComplianceInternalReminderNotificationEmail()
+
     url = settings.SITE_URL
+
     url += reverse("internal-compliance-detail", kwargs={"compliance_pk": compliance.id})
-    if "-internal" not in url:
-        # add it. This email is for internal staff
-        url = f"-internal.{settings.SITE_DOMAIN}".join(url.split("." + settings.SITE_DOMAIN))
+
+    url = convert_external_url_to_internal_url(url)
 
     context = {"compliance": compliance, "url": url}
 
@@ -173,12 +189,14 @@ def send_internal_reminder_email_notification(compliance):
 
 
 def send_apiary_internal_reminder_email_notification(compliance):
+    """Recipient: Always internal users"""
     email = ComplianceInternalReminderNotificationEmail()
+
     url = settings.SITE_URL
+
     url += reverse("internal-compliance-detail", kwargs={"compliance_pk": compliance.id})
-    if "-internal" not in url:
-        # add it. This email is for internal staff
-        url = f"-internal.{settings.SITE_DOMAIN}".join(url.split("." + settings.SITE_DOMAIN))
+
+    url = convert_external_url_to_internal_url(url)
 
     context = {"compliance": compliance, "url": url}
 
@@ -194,9 +212,15 @@ def send_apiary_internal_reminder_email_notification(compliance):
 
 
 def send_apiary_due_email_notification(compliance):
+    """Recipient: Always external users"""
     email = ComplianceDueNotificationEmail()
+
     url = settings.SITE_URL
+
     url += reverse("external-compliance-detail", kwargs={"compliance_pk": compliance.id})
+
+    url = convert_internal_url_to_external_url(url)
+
     context = {
         "compliance": compliance,
         "url": url,
