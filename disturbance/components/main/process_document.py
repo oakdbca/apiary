@@ -19,7 +19,7 @@ def process_generic_document(request, instance, document_type=None, *args, **kwa
         comms_log_id = request.data.get('comms_log_id')
         comms_instance = None
 
-        if document_type == 'comms_log' and comms_log_id and comms_log_id is not 'null':
+        if document_type == 'comms_log' and comms_log_id and comms_log_id != 'null':
             comms_instance = instance.comms_logs.get(id=comms_log_id)
         elif document_type == 'comms_log':
             comms_instance = instance.comms_logs.create()
